@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 教务系统大量为 http 站点;本应用无服务器、账密只提交给学校系统自身,
+     放行明文流量是产品必需(用户在 webview 中自行登录学校页面)。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
