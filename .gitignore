@@ -1,0 +1,32 @@
+# Dart/Flutter
+.dart_tool/
+*.lock.tmp
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Android
+apps/app/android/.gradle/
+apps/app/android/local.properties
+apps/app/android/key.properties
+*.jks
+*.keystore
+**/gradle-wrapper.jar
+captures/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 本地产物与调试工具(不入库)
+*.apk
+.video_agent/
+.env.local
+apps/app/test/proxy_relay.py
+packages/coursesight_core/tool/
