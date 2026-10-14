@@ -79,5 +79,9 @@ jobs:
       - name: 发布 Release 并上传 APK
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ github.ref_name }}
+          # 发布说明取 tag 的 annotation(git tag -a -F 写的内容),
+          # 不用自动生成的提交列表
+          generate_release_notes: false
           files: apps/app/build/app/outputs/flutter-apk/coursesight-*.apk
           fail_on_unmatched_files: true

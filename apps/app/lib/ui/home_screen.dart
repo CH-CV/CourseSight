@@ -99,14 +99,32 @@ class HomeScreen extends ConsumerWidget {
                 Expanded(
                   child: courses.isEmpty
                       ? _NoCoursesHint(onImport: () => context.push('/import'))
-                      : TimetableGrid(
-                          courses: courses,
-                          sectionTimes: sections,
-                          viewedWeek: viewed,
-                          showWeekend: settings.showWeekend,
-                          showNowLine: settings.showNowLine,
-                          firstWeekMonday: timetable.firstWeekMonday,
-                          weekStartDay: settings.weekStartDay,
+                      : GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onHorizontalDragEnd: (details) {
+                            final v = details.primaryVelocity ?? 0;
+                            if (v > 180) {
+                              // 向右滑 → 上一周(不低于第 1 周)
+                              if (viewed > 1) {
+                                ref
+                                    .read(viewedWeekProvider.notifier)
+                                    .set(viewed - 1);
+                              }
+                            } else if (v < -180) {
+                              ref
+                                  .read(viewedWeekProvider.notifier)
+                                  .set(viewed + 1);
+                            }
+                          },
+                          child: TimetableGrid(
+                            courses: courses,
+                            sectionTimes: sections,
+                            viewedWeek: viewed,
+                            showWeekend: settings.showWeekend,
+                            showNowLine: settings.showNowLine,
+                            firstWeekMonday: timetable.firstWeekMonday,
+                            weekStartDay: settings.weekStartDay,
+                          ),
                         ),
                 ),
               ],
