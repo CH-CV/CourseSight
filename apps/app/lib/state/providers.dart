@@ -5,9 +5,14 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../data/db.dart';
 import '../data/entities.dart';
+
+/// 应用版本(构建时烤进 APK,CI 发版由 tag 注入)。
+final packageInfoProvider = FutureProvider<PackageInfo>(
+    (ref) => PackageInfo.fromPlatform());
 
 /// 当前周(页面上用户正在看的周),跨页共享。
 class ViewedWeekNotifier extends Notifier<int?> {

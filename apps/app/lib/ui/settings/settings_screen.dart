@@ -181,9 +181,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Divider(height: 32),
 
           _sectionHeader(context, '关于'),
-          const ListTile(
-            title: Text('课见 CourseSight'),
-            subtitle: Text('v0.1.0 · 开源(MIT)'),
+          ListTile(
+            title: const Text('课见 CourseSight'),
+            subtitle: Text(
+                'v${ref.watch(packageInfoProvider).value?.version ?? '…'} · 开源(MIT)'),
           ),
         ],
       ),
