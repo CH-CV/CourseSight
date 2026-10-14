@@ -9,21 +9,24 @@ import 'package:coursesight_core/coursesight_core.dart';
 class Timetable {
   final int? id;
   String name;
-  String? firstWeekMonday; // YYYY-MM-DD
-  int totalWeeks;
+  String? firstWeekMonday; // YYYY-MM-DD,第一教学周开始日(任意星期几)
+
+  /// 页面声明的学期总周数;null = 页面未说明(不设人为上限,
+  /// 课排到第几周就显示到第几周)。DB 里以 0 表示未声明。
+  int? totalWeeks;
 
   Timetable({
     this.id,
     required this.name,
     this.firstWeekMonday,
-    this.totalWeeks = 20,
+    this.totalWeeks,
   });
 
   Map<String, dynamic> toRow() => {
         if (id != null) 'id': id,
         'name': name,
         'first_week_monday': firstWeekMonday,
-        'total_weeks': totalWeeks,
+        'total_weeks': totalWeeks ?? 0,
         'updated_at': DateTime.now().toIso8601String(),
       };
 
@@ -31,16 +34,20 @@ class Timetable {
         id: row['id'] as int,
         name: row['name'] as String,
         firstWeekMonday: row['first_week_monday'] as String?,
-        totalWeeks: (row['total_weeks'] as int?) ?? 20,
+        totalWeeks: () {
+          final tw = row['total_weeks'] as int?;
+          return (tw == null || tw <= 0) ? null : tw;
+        }(),
       );
 
-  /// 当前是第几周(以本地今天计);锚点缺失或越界返回 null。
+  /// 当前是第几周(以本地今天计);开学日缺失或早于开学返回 null。
   /// [weekStartDay] 是该校一周的第一天(1=周一,7=周日),
   /// 锚点(第一教学周开始日)不一定是周首,由学校决定。
+  /// 不设学期末上限:声明周数之外照常推算,由无课空白表达假期。
   int? currentWeek(DateTime today, {int weekStartDay = 1}) {
     if (firstWeekMonday == null) return null;
     final w = weekOfDate(firstWeekMonday!, today, weekStartDay: weekStartDay);
-    if (w < 1 || w > totalWeeks) return null;
+    if (w < 1) return null;
     return w;
   }
 }

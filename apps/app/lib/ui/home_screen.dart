@@ -20,11 +20,22 @@ class HomeScreen extends ConsumerWidget {
     final sections = ref.watch(sectionTimesProvider);
     final settings = ref.watch(settingsProvider);
 
-    // 有效周数:无课表时给 1,便于空态渲染
-    final totalWeeks = timetable?.totalWeeks ?? 1;
+    // 可浏览周上限由数据决定:课程涉及的最大周、页面声明周数、当前周取最大
+    var dataMaxWeek = 0;
+    for (final c in courses) {
+      for (final w in c.weeks) {
+        if (w > dataMaxWeek) dataMaxWeek = w;
+      }
+    }
     final currentWeek =
         timetable?.currentWeek(DateTime.now(), weekStartDay: settings.weekStartDay);
-    final viewed = ref.watch(viewedWeekProvider) ?? currentWeek ?? 1;
+    final maxWeek = [
+      dataMaxWeek,
+      timetable?.totalWeeks ?? 0,
+      currentWeek ?? 0,
+    ].reduce((a, b) => a > b ? a : b);
+    final viewed =
+        (ref.watch(viewedWeekProvider) ?? currentWeek ?? 1).clamp(1, maxWeek < 1 ? 1 : maxWeek);
 
     ref.listen(currentTimetableIdProvider, (prev, next) {
       // 切换课表后刷新周视图到"今天"
@@ -78,9 +89,10 @@ class HomeScreen extends ConsumerWidget {
           : Column(
               children: [
                 _WeekSwitcher(
-                  totalWeeks: totalWeeks,
+                  declaredTotalWeeks: timetable.totalWeeks,
+                  maxWeek: maxWeek,
                   currentWeek: currentWeek,
-                  viewedWeek: viewed.clamp(1, totalWeeks),
+                  viewedWeek: viewed,
                   onChanged: (w) =>
                       ref.read(viewedWeekProvider.notifier).set(w),
                 ),
@@ -90,7 +102,7 @@ class HomeScreen extends ConsumerWidget {
                       : TimetableGrid(
                           courses: courses,
                           sectionTimes: sections,
-                          viewedWeek: viewed.clamp(1, totalWeeks),
+                          viewedWeek: viewed,
                           showWeekend: settings.showWeekend,
                           showNowLine: settings.showNowLine,
                           firstWeekMonday: timetable.firstWeekMonday,
@@ -110,13 +122,18 @@ class HomeScreen extends ConsumerWidget {
 }
 
 class _WeekSwitcher extends StatelessWidget {
-  final int totalWeeks;
+  /// 页面声明的学期总周数;null = 页面未说明(表头不显示「共 N 周」)。
+  final int? declaredTotalWeeks;
+
+  /// 可浏览周上限:课程最大周 / 声明周数 / 当前周的较大者;向前翻不受限。
+  final int maxWeek;
   final int? currentWeek;
   final int viewedWeek;
   final ValueChanged<int> onChanged;
 
   const _WeekSwitcher({
-    required this.totalWeeks,
+    required this.declaredTotalWeeks,
+    required this.maxWeek,
     required this.currentWeek,
     required this.viewedWeek,
     required this.onChanged,
@@ -146,7 +163,9 @@ class _WeekSwitcher extends StatelessWidget {
                     color: isCurrentWeek ? scheme.primary : scheme.outline),
               ),
               child: Text(
-                '第 $viewedWeek 周 / 共 $totalWeeks 周',
+                declaredTotalWeeks != null
+                    ? '第 $viewedWeek 周 / 共 $declaredTotalWeeks 周'
+                    : '第 $viewedWeek 周',
                 style: TextStyle(
                   fontSize: 13,
                   color: isCurrentWeek ? scheme.primary : null,
@@ -158,8 +177,8 @@ class _WeekSwitcher extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed:
-                viewedWeek < totalWeeks ? () => onChanged(viewedWeek + 1) : null,
+            // 向前翻不受声明周数限制:没课就是空白格子
+            onPressed: () => onChanged(viewedWeek + 1),
           ),
           if (!isCurrentWeek && currentWeek != null)
             TextButton(
@@ -172,6 +191,8 @@ class _WeekSwitcher extends StatelessWidget {
   }
 
   Future<void> _pickWeek(BuildContext context) async {
+    // 快捷跳转列表覆盖到已能到达的最大周;超出部分仍可用箭头前进
+    final listEnd = maxWeek > viewedWeek ? maxWeek : viewedWeek;
     final picked = await showModalBottomSheet<int>(
       context: context,
       builder: (context) => SafeArea(
@@ -181,7 +202,7 @@ class _WeekSwitcher extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (var w = 1; w <= totalWeeks; w++)
+              for (var w = 1; w <= listEnd; w++)
                 OutlinedButton(
                   onPressed: () => Navigator.pop(context, w),
                   child: Text('$w'),

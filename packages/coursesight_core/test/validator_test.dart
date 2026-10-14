@@ -106,13 +106,23 @@ void main() {
     expect(r.warnings.any((w) => w.code == WarningCode.lowConfidence), isTrue);
   });
 
-  test('缺周次按全学期处理并记 weeksDefaulted 警告', () {
+  test('缺周次 → 按同页其他课声明的最大周补全(数据驱动)', () {
+    final r = validateSubmission(rawSubmission(courses: [
+      {'name': '有周次课', 'dayOfWeek': 1, 'startSection': 1, 'endSection': 2,
+       'weeks': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
+      {'name': '无周次课', 'dayOfWeek': 5, 'startSection': 1, 'endSection': 1},
+    ]));
+    // 即使 totalWeeks 声明 16,补全也只到本页数据里的最大周 12
+    expect(r.timetable.courses.last.weeks.length, 12);
+    expect(r.warnings.any((w) => w.code == WarningCode.weeksDefaulted),
+        isTrue);
+  });
+
+  test('缺周次且无参照 → 按惯例 20 周补全', () {
     final r = validateSubmission(rawSubmission(courses: [
       {'name': '无周次课', 'dayOfWeek': 5, 'startSection': 1, 'endSection': 1},
     ]));
-    expect(r.timetable.courses.single.weeks.length, 16);
-    expect(r.warnings.any((w) => w.code == WarningCode.weeksDefaulted),
-        isTrue);
+    expect(r.timetable.courses.single.weeks.length, 20);
   });
 
   test('第一周日期不是周一 → 按学校声明原样保留', () {
@@ -188,9 +198,9 @@ void main() {
     expect(agg.single.message, contains('疑似误识别'));
   });
 
-  test('totalWeeks 异常值被钳制', () {
+  test('totalWeeks:声明则原样保留(不钳制),非法/缺失 → null', () {
     final r = validateSubmission(rawSubmission(
-        totalWeeks: -5,
+        totalWeeks: 22,
         courses: [
           {
             'name': 'A',
@@ -200,24 +210,40 @@ void main() {
             'weeks': [1]
           }
         ]));
-    expect(r.timetable.totalWeeks, 1);
-    final r2 = validateSubmission(rawSubmission(totalWeeks: 999));
-    expect(r2.timetable.totalWeeks, 60);
+    // 声明值原样透传,不钳制
+    expect(r.timetable.totalWeeks, 22);
+    expect(validateSubmission(rawSubmission(totalWeeks: -5)).timetable.totalWeeks, isNull);
+    expect(validateSubmission(rawSubmission(totalWeeks: 999)).timetable.totalWeeks, isNull);
+    expect(validateSubmission(rawSubmission(totalWeeks: null)).timetable.totalWeeks, isNull);
   });
 
-  test('超出总周数的周次被过滤并告警', () {
+  test('周次不按总周数裁剪:超过声明周数也保留,只滤 1-99 之外的垃圾值', () {
     final r = validateSubmission(rawSubmission(courses: [
       {
         'name': '跨界课',
         'dayOfWeek': 1,
         'startSection': 1,
         'endSection': 1,
-        'weeks': [1, 2, 99]
+        'weeks': [1, 2, 25]
       },
     ]));
-    expect(r.timetable.courses.single.weeks, [1, 2]);
+    // totalWeeks 声明 16,第 25 周的记录仍保留
+    expect(r.timetable.courses.single.weeks, [1, 2, 25]);
     expect(
         r.warnings.any((w) => w.code == WarningCode.invalidEntryDropped),
+        isFalse);
+    final r2 = validateSubmission(rawSubmission(courses: [
+      {
+        'name': '垃圾周次课',
+        'dayOfWeek': 1,
+        'startSection': 1,
+        'endSection': 1,
+        'weeks': [1, 120]
+      },
+    ]));
+    expect(r2.timetable.courses.single.weeks, [1]);
+    expect(
+        r2.warnings.any((w) => w.code == WarningCode.invalidEntryDropped),
         isTrue);
   });
 

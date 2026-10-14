@@ -82,10 +82,12 @@ ValidationResult validateSubmission(
         timetable: const TimetableData(), errors: errors);
   }
 
-  // 总周数一次性钳制,后续统一使用
-  var totalWeeks = _toInt(raw['totalWeeks']) ?? 20;
-  if (totalWeeks < 1) totalWeeks = 1;
-  if (totalWeeks > 60) totalWeeks = 60;
+  // 总周数:仅当页面声明时才记录(可选元数据),只作展示参考。
+  final rawTotalWeeks = _toInt(raw['totalWeeks']);
+  final int? totalWeeks =
+      (rawTotalWeeks != null && rawTotalWeeks >= 1 && rawTotalWeeks <= 99)
+          ? rawTotalWeeks
+          : null;
 
   // 第一教学周开始日:按学校声明原样保留(不一定是周一——有的学校以
   // 周日或注册日起算第一周)。非法才置空。
@@ -146,6 +148,7 @@ ValidationResult validateSubmission(
   final mergedIndexOfRaw = <int, int>{};
   final outOfScheduleRaw = <int>[]; // 记录需要截断告警的原始下标
   final weeksOutOfRangeRaw = <int>[];
+  final weeksDeferredIdx = <int>[]; // 缺周次、待数据驱动补全的合并下标
 
   for (var i = 0; i < rawCourses.length; i++) {
     final rawCourse = rawCourses[i];
@@ -191,14 +194,16 @@ ValidationResult validateSubmission(
         ? weeksRaw
             .map(_toInt)
             .whereType<int>()
-            .where((w) => w >= 1 && w <= totalWeeks)
+            .where((w) => w >= 1 && w <= 99)
             .toList()
         : <int>[];
     if (weeksRaw is List && weeks.length != weeksRaw.length) {
       weeksOutOfRangeRaw.add(i);
     }
+    // 缺周次的课留空,循环结束后按本页已声明周次的最大值补全(数据驱动);无任何参照时用惯例值 20。
+    var weeksDeferred = false;
     if (weeks.isEmpty) {
-      weeks = List.generate(totalWeeks, (idx) => idx + 1);
+      weeksDeferred = true;
       warnings.add(ParseWarning(
           WarningCode.weeksDefaulted, '「$name」无有效周次,按全学期处理'));
     }
@@ -238,6 +243,20 @@ ValidationResult validateSubmission(
       courses.add(course);
       mergedIndexOfRaw[i] = courses.length - 1;
     }
+    if (weeksDeferred) weeksDeferredIdx.add(mergedIndexOfRaw[i]!);
+  }
+
+  // 缺周次的课补全到本页已声明周次的最大值(数据驱动)
+  var declaredMax = 0;
+  for (final c in courses) {
+    for (final w in c.weeks) {
+      if (w > declaredMax) declaredMax = w;
+    }
+  }
+  final fillEnd = declaredMax >= 1 ? declaredMax : 20;
+  for (final mi in weeksDeferredIdx) {
+    courses[mi] = courses[mi]
+        .copyWith(weeks: List.generate(fillEnd, (idx) => idx + 1));
   }
 
   // ── 以下警告均以合并后的下标为准(与最终课表顺序一致)──
@@ -255,7 +274,7 @@ ValidationResult validateSubmission(
     if (mi == null) continue;
     warnings.add(ParseWarning(
         WarningCode.invalidEntryDropped,
-        '「${courses[mi].name}」部分周次超出总周数 $totalWeeks,已忽略',
+        '「${courses[mi].name}」部分周次超出合理范围(1-99),已忽略',
         courseIndex: mi));
   }
 
@@ -329,6 +348,14 @@ TimetableData sanitizeTimetable(TimetableData t) {
   final maxSection = t.timeConfig.isEmpty
       ? defaultSectionTimes.length
       : t.timeConfig.map((e) => e.section).reduce((a, b) => a > b ? a : b);
+  // 缺周次补全的参照:本次保留课程里已声明的最大周(数据驱动)
+  var declaredMax = 0;
+  for (final c in t.courses) {
+    for (final w in c.weeks) {
+      if (w >= 1 && w <= 99 && w > declaredMax) declaredMax = w;
+    }
+  }
+  final fillEnd = declaredMax >= 1 ? declaredMax : 20;
   final kept = <CourseData>[];
   for (final c in t.courses) {
     if (c.name.trim().isEmpty) continue;
@@ -336,14 +363,14 @@ TimetableData sanitizeTimetable(TimetableData t) {
     var end = c.endSection > maxSection ? maxSection : c.endSection;
     if (end < start) end = start;
     final weeks = c.weeks
-        .where((w) => w >= 1 && w <= t.totalWeeks)
+        .where((w) => w >= 1 && w <= 99)
         .toList()
       ..sort();
     kept.add(c.copyWith(
       name: c.name.trim(),
       startSection: start,
       endSection: end,
-      weeks: weeks.isEmpty ? List.generate(t.totalWeeks, (i) => i + 1) : weeks,
+      weeks: weeks.isEmpty ? List.generate(fillEnd, (i) => i + 1) : weeks,
     ));
   }
   return t.copyWith(courses: kept);

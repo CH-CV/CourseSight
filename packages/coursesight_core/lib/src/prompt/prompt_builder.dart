@@ -12,8 +12,8 @@ Map<String, dynamic> buildSubmitTimetableTool() => {
         'required': ['courses'],
         'properties': {
           'totalWeeks': {
-            'type': 'integer',
-            'description': '本学期总周数,页面未说明则填 20',
+            'type': ['integer', 'null'],
+            'description': '本学期总周数;页面有说明(如「共20周」)才填,没有则填 null',
           },
           'firstWeekMonday': {
             'type': ['string', 'null'],

@@ -326,7 +326,7 @@ class _CourseEditScreenState extends ConsumerState<CourseEditScreen> {
         startSection: _startSection,
         endSection: _endSection,
         weeks: _weeks.toList()..sort(),
-        weekType: _inferType(_weeks, timetable.totalWeeks),
+        weekType: _inferType(_weeks, timetable.totalWeeks ?? 20),
         colorIndex: _colorIndex,
         note: _noteController.text.trim(),
       );
@@ -341,7 +341,7 @@ class _CourseEditScreenState extends ConsumerState<CourseEditScreen> {
         startSection: _startSection,
         endSection: _endSection,
         weeks: _weeks.toList()..sort(),
-        weekType: _inferType(_weeks, timetable.totalWeeks),
+        weekType: _inferType(_weeks, timetable.totalWeeks ?? 20),
         colorIndex: _colorIndex,
         note: _noteController.text.trim(),
       ));

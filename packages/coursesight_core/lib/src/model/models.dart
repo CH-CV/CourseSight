@@ -161,14 +161,17 @@ class TimetableData {
   static const int schemaVersion = 1;
 
   final String? name;
-  final int totalWeeks;
+
+  /// 页面声明的学期总周数;null = 页面未说明。
+  /// 仅作展示与假期判定参考,不用于裁剪课程周次。
+  final int? totalWeeks;
   final String? firstWeekMonday; // "YYYY-MM-DD",可为空
   final List<SectionTime> timeConfig;
   final List<CourseData> courses;
 
   const TimetableData({
     this.name,
-    this.totalWeeks = 20,
+    this.totalWeeks,
     this.firstWeekMonday,
     this.timeConfig = const [],
     this.courses = const [],
@@ -210,7 +213,7 @@ class TimetableData {
         .toList();
     return TimetableData(
       name: json['name'] as String?,
-      totalWeeks: (json['totalWeeks'] as num?)?.toInt() ?? 20,
+      totalWeeks: (json['totalWeeks'] as num?)?.toInt(),
       firstWeekMonday: json['firstWeekMonday'] as String?,
       timeConfig: timeConfig,
       courses: courses,

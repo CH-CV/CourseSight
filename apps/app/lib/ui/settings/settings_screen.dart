@@ -99,32 +99,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
             ),
           ),
-          ListTile(
-            title: const Text('学期总周数'),
-            subtitle: Text('${timetable?.totalWeeks ?? 20} 周'),
-            trailing: SizedBox(
-              width: 100,
-              child: TextFormField(
-                initialValue: '${timetable?.totalWeeks ?? 20}',
-                keyboardType: TextInputType.number,
-                onFieldSubmitted: (value) async {
-                  final weeks = int.tryParse(value);
-                  if (weeks == null || weeks < 1 || weeks > 60) return;
-                  if (timetable?.id == null) return;
-                  final updated = Timetable(
-                    id: timetable!.id,
-                    name: timetable.name,
-                    firstWeekMonday: timetable.firstWeekMonday,
-                    totalWeeks: weeks,
-                  );
-                  await ref
-                      .read(timetablesProvider.notifier)
-                      .update(updated);
-                  await refreshAfterChange();
-                },
-              ),
-            ),
-          ),
           const Divider(height: 32),
 
           _sectionHeader(context, '作息时间'),
