@@ -17,7 +17,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "top.coursesight.coursesight_app"
-    compileSdk = flutter.compileSdkVersion
+    // 固定 37:flutter_secure_storage 要求 compileSdk 37,高于 Flutter 模板默认值
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

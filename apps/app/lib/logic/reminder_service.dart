@@ -138,7 +138,7 @@ class ReminderService {
         final date = today.add(Duration(days: offset));
         final week = weekOfDate(timetable.firstWeekMonday!, date,
             weekStartDay: weekStartDay);
-        if (week < 1 || week > timetable.totalWeeks) continue;
+        if (week < 1) continue;
 
         for (final c in courses) {
           if (c.dayOfWeek != date.weekday || !c.inWeek(week)) continue;
@@ -249,12 +249,14 @@ class ReminderService {
           'total': todays.length,
         }),
       );
-      await HomeWidget.updateWidget(
-        androidName: _widgetAndroidName,
-        qualifiedAndroidName: 'top.coursesight.coursesight_app.$_widgetAndroidName',
-      );
+      // 前台路径立即重绘;后台回调路径由系统按 updatePeriodMillis 自行重绘,
+      // 后台 isolate 不触发 updateWidget(方法通道在后台受限制且无必要)。
       if (triggerUpdate) {
-        // 后台回调路径不触发 updateWidget,避免回调递归
+        await HomeWidget.updateWidget(
+          androidName: _widgetAndroidName,
+          qualifiedAndroidName:
+              'top.coursesight.coursesight_app.$_widgetAndroidName',
+        );
       }
     } catch (_) {
       // 小组件失败不影响主流程

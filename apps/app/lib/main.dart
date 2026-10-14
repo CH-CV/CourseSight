@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,11 +38,6 @@ Future<void> main() async {
 @pragma('vm:entry-point')
 Future<void> widgetBackgroundCallback(Uri? uri) async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isAndroid) {
-    // 后台 isolate 需要显式注册插件
-    // (home_widget/sqflite/shared_preferences 均为 medthod-channel 插件,
-    //  Flutter 引擎在后台 isolate 自动注册 GeneratedPluginRegistrant)
-  }
   final container = ProviderContainer();
   try {
     await container.read(settingsProvider.notifier).load();
