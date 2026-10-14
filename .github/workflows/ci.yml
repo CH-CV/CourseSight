@@ -1,0 +1,38 @@
+name: CI
+
+# push / PR 时跑质量闸门,不构建产物。
+# pub workspace 多包结构:测试在 packages/coursesight_core,
+# 根目录没有 test/,必须分包执行。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.41.5'
+
+      - name: 依赖(workspace 根解析全部成员)
+        run: flutter pub get
+
+      - name: 解析引擎 analyze + test
+        working-directory: packages/coursesight_core
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: 应用 analyze
+        working-directory: apps/app
+        run: flutter analyze
