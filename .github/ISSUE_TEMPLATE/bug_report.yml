@@ -1,0 +1,67 @@
+name: 问题反馈
+description: 报告解析失败、界面异常或其他缺陷
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        反馈前请先确认已阅读 README 的常见问题。
+        解析失败时,导入页的「导出诊断包」按钮会生成包含页面结构与错误信息的文件,
+        附上它能大幅缩短定位时间。
+
+  - type: input
+    id: school
+    attributes:
+      label: 学校与教务系统类型
+      description: 如「XX大学 · 金智/jsxsd」;无法确定可只写学校或不填
+    validations:
+      required: false
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI 服务商
+      options:
+        - 智谱AI(GLM)
+        - 阶跃星辰(StepFun)
+        - DeepSeek
+        - Kimi(月之暗面)
+        - 通义千问(阿里云百炼)
+        - 硅基流动
+        - Ollama(本地)
+        - 其他 / 自定义端点
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从打开 App 到问题出现的完整操作过程
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 诊断包内容(可选)
+      description: |
+        粘贴诊断包 JSON。注意:其中包含抓取到的课表页面,
+        请先自行确认不含姓名、学号等个人敏感信息再提交。
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: App 版本
+      description: 如 v0.1.0,设置页「关于」可查看
+    validations:
+      required: false
