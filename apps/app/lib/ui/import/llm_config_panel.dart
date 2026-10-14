@@ -20,6 +20,8 @@ class LlmPreset {
 const llmPresets = <LlmPreset>[
   LlmPreset('智谱AI(GLM)', 'https://open.bigmodel.cn/api/paas/v4',
       'glm-5.3-flash', 'open.bigmodel.cn → API keys'),
+  LlmPreset('阶跃星辰(StepFun)', 'https://api.stepfun.com/step_plan/v1',
+      'step-5-preview', 'platform.stepfun.com → API Keys 管理'),
   LlmPreset('DeepSeek', 'https://api.deepseek.com/v1', 'deepseek-chat',
       'platform.deepseek.com → API keys,价格低'),
   LlmPreset('Kimi(月之暗面)', 'https://api.moonshot.cn/v1', 'kimi-k2',

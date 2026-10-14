@@ -4,7 +4,15 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show ConnectionTask, HttpClient, InternetAddress, InternetAddressType, Socket;
+import 'dart:io'
+    show
+        ConnectionTask,
+        HttpClient,
+        HttpException,
+        InternetAddress,
+        InternetAddressType,
+        Socket,
+        SocketException;
 
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart' as http_io;
@@ -37,35 +45,59 @@ class OpenAiCompatibleConfig {
 
 class OpenAiCompatibleClient implements LlmClient {
   final OpenAiCompatibleConfig config;
-  final http.Client _http;
   final Duration connectTimeout;
   final Duration responseTimeout;
+
+  /// 主通道:dart:io 默认拨号(双栈、Happy Eyeballs)。
+  final http.Client _primary;
+
+  /// 兜底通道:IPv4 优先的自定义拨号,仅当主通道在连接阶段失败时启用。
+  /// 注:经过 connectionFactory 的连接,其 TLS 升级路径与默认拨号存在
+  /// 握手特征差异,个别严格 WAF(如火山引擎防护的端点)会以 301 拒绝
+  /// 工厂连接而放行默认连接——因此默认连接可用时绝不走工厂。
+  final http.Client? _fallback;
 
   OpenAiCompatibleClient({
     required this.config,
     http.Client? httpclient,
     this.connectTimeout = const Duration(seconds: 10),
     this.responseTimeout = const Duration(seconds: 120),
-  }) : _http = httpclient ?? _defaultClient(connectTimeout);
+  })  : _primary = httpclient ??
+            http_io.IOClient(HttpClient()
+              ..connectionTimeout = connectTimeout),
+        _fallback = httpclient == null ? _ipv4FirstClient(connectTimeout) : null;
 
-  /// 连接与响应分离计时。
-  ///
-  /// 连接阶段必须走 [Socket.startConnect] 的 ConnectionTask(dart:io 内部
-  /// 已实现 Happy Eyeballs / RFC 8305):域名解析出 IPv6+IPv4 双族地址时
-  /// 错峰并行拨号、先连上者胜。不能简单依赖
-  /// `HttpClient.connectionTimeout` —— 它与"地址族回落"互斥:首选地址
-  /// (常见为 IPv6)在纯 IPv4 网络(如安卓模拟器 NAT)挂起时,超时会把
-  /// 整个连接判死而不回落 IPv4,导致浏览器全通、App 独死。
-  /// 这里在 connectionFactory 里自己施加 connectTimeout,超时即取消整个
-  /// task(挂起的 IPv6 socket 由 cancel 关闭,不泄漏)。
-  static http.Client _defaultClient(Duration connectTimeout) {
+  /// 统一发送:主通道连接阶段失败(SocketException/超时,典型如模拟器
+  /// NAT 无 IPv6 路由)时,重建请求走 IPv4 优先兜底通道重试一次。
+  /// 请求体由 [build] 闭包重建——package:http 的 Request 只能消费一次。
+  Future<http.StreamedResponse> _send(
+      http.Request Function() build) async {
+    final overall = responseTimeout + connectTimeout;
+    try {
+      return await _primary.send(build()).timeout(overall);
+    } on SocketException catch (e) {
+      return _viaFallback(build, overall, e);
+    } on TimeoutException catch (e) {
+      return _viaFallback(build, overall, e);
+    } on HttpException catch (e) {
+      return _viaFallback(build, overall, e);
+    }
+  }
+
+  Future<http.StreamedResponse> _viaFallback(
+      http.Request Function() build, Duration overall, Object cause) async {
+    final fb = _fallback;
+    if (fb == null) throw cause;
+    return await fb.send(build()).timeout(overall);
+  }
+
+  /// IPv4 优先拨号:解析地址先试 A 记录,单地址超时即取消换下一个。
+  /// 用于默认拨号不可用的环境(如无 IPv6 路由的安卓模拟器)。
+  static http.Client _ipv4FirstClient(Duration connectTimeout) {
     final inner = HttpClient()
       ..connectionFactory = (Uri uri, String? proxyHost, int? proxyPort) async {
         final host = proxyHost ?? uri.host;
         final port = proxyPort ?? uri.port;
-        // IPv4 优先:解析地址并先试 A 记录。模拟器 NAT 与部分网络没有
-        // IPv6 路由,而 Dart 会先试 DNS 返回的 IPv6 并长时间挂起,
-        // IPv4 连不上时再依次尝试其余地址。
         final addresses = await InternetAddress.lookup(host);
         final sorted = [...addresses]
           ..sort((a, b) {
@@ -82,20 +114,16 @@ class OpenAiCompatibleClient implements LlmClient {
                 connectTimeout,
                 onTimeout: () {
                   task.cancel();
-                  throw LlmException(LlmErrorKind.network,
-                      '连接超时(${connectTimeout.inSeconds}s)');
+                  throw SocketException('连接超时(${connectTimeout.inSeconds}s)');
                 },
               ),
               task.cancel,
             );
-          } on LlmException {
-            rethrow;
           } catch (e) {
             lastError = e;
           }
         }
-        throw LlmException(LlmErrorKind.network,
-            '所有地址均连接失败: $lastError');
+        throw SocketException('所有地址均连接失败: $lastError');
       };
     return http_io.IOClient(inner);
   }
@@ -130,19 +158,22 @@ class OpenAiCompatibleClient implements LlmClient {
   Future<LlmResponse> complete(LlmRequest request) async {
     final body = _buildBody(request);
 
+    http.Request build() {
+      final req = http.Request('POST', config.endpoint)
+        ..headers['Content-Type'] = 'application/json'
+        ..headers['User-Agent'] =
+            'CourseSight/0.1 (Android; OpenAI-compatible client)';
+      if (config.sendAuthHeader && config.apiKey.isNotEmpty) {
+        req.headers['Authorization'] = 'Bearer ${config.apiKey}';
+      }
+      req.body = jsonEncode(body);
+      return req;
+    }
+
     final http.Response resp;
     try {
-      resp = await _http
-          .post(
-            config.endpoint,
-            headers: {
-              'Content-Type': 'application/json',
-              if (config.sendAuthHeader && config.apiKey.isNotEmpty)
-                'Authorization': 'Bearer ${config.apiKey}',
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(responseTimeout);
+      final streamed = await _send(build);
+      resp = await http.Response.fromStream(streamed);
     } on TimeoutException catch (e) {
       throw LlmException(LlmErrorKind.network, '超时: ${e.message}');
     } catch (e) {
@@ -152,6 +183,19 @@ class OpenAiCompatibleClient implements LlmClient {
     switch (resp.statusCode) {
       case 200:
         break;
+      case 301:
+      case 302:
+      case 307:
+      case 308:
+        // POST 的重定向不可自动跟随(301 会退化为 GET,必被 API 拒绝),
+        // 把 Location 与 WAF 线索报给用户排查 Base URL。
+        final cookie = resp.headers['set-cookie'];
+        throw LlmException(
+            LlmErrorKind.badResponse,
+            'HTTP ${resp.statusCode}: 服务端要求跳转到 '
+            '${resp.headers['location'] ?? '(响应未提供)'}'
+            '${cookie != null ? '(并下发 Cookie,疑似 WAF 挑战)' : ''};'
+            '请检查 Base URL 的协议与路径是否和服务商文档一致');
       case 401:
       case 403:
         throw LlmException(
@@ -254,15 +298,21 @@ class OpenAiCompatibleClient implements LlmClient {
   }) async {
     final body = _buildBody(request)..['stream'] = true;
 
-    final http.StreamedResponse resp;
-    try {
+    http.Request build() {
       final req = http.Request('POST', config.endpoint)
         ..headers['Content-Type'] = 'application/json'
-        ..body = jsonEncode(body);
+        ..headers['User-Agent'] =
+            'CourseSight/0.1 (Android; OpenAI-compatible client)';
       if (config.sendAuthHeader && config.apiKey.isNotEmpty) {
         req.headers['Authorization'] = 'Bearer ${config.apiKey}';
       }
-      resp = await _http.send(req).timeout(connectTimeout + responseTimeout);
+      req.body = jsonEncode(body);
+      return req;
+    }
+
+    final http.StreamedResponse resp;
+    try {
+      resp = await _send(build);
     } on TimeoutException catch (e) {
       throw LlmException(LlmErrorKind.network, '超时: ${e.message}');
     } catch (e) {
@@ -271,6 +321,13 @@ class OpenAiCompatibleClient implements LlmClient {
 
     if (resp.statusCode != 200) {
       final text = await resp.stream.bytesToString();
+      // 3xx:POST 的重定向不可自动跟随(301 会退化为 GET,必被 API 拒绝)。
+      // 把 Location 报给用户——重定向目标是排查 Base URL 的关键线索。
+      if (resp.statusCode >= 300 && resp.statusCode < 400) {
+        final location = resp.headers['location'] ?? '(响应未提供)';
+        throw LlmException(LlmErrorKind.badResponse,
+            'HTTP ${resp.statusCode}: 服务端要求跳转到 $location;请检查 Base URL 的协议与路径是否和服务商文档一致(如 https:// 是否写对)');
+      }
       switch (resp.statusCode) {
         case 401:
         case 403:
